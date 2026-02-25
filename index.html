@@ -200,8 +200,24 @@
 
         <div class="card">
             <h3>К оплате участникам</h3>
-            <p>Перевод: <b>{{ currentTable.paymentPhone || 'Номер не указан' }}</b></p>
-            <p>Банки: <b style="color: #007bff;">{{ currentTable.bank1 || 'Не выбран' }}</b> <span v-if="currentTable.bank1 && currentTable.bank2">и</span> <b style="color: #007bff;">{{ currentTable.bank2 }}</b></p>
+            <div style="background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <p style="margin: 0 0 5px 0;">Перевод по номеру:</p>
+                    <b style="font-size: 18px;">{{ currentTable.paymentPhone || 'Номер не указан' }}</b>
+                    <button v-if="currentTable.paymentPhone" @click="copyPhone" class="secondary" style="padding: 4px 8px; margin-left: 10px; font-size: 12px;">📋 Скопировать</button>
+
+                    <p style="margin: 10px 0 0 0; font-size: 14px;">Банки:
+                        <b style="color: #007bff;">{{ currentTable.bank1 || 'Не выбран' }}</b>
+                        <span v-if="currentTable.bank1 && currentTable.bank2">и</span>
+                        <b style="color: #007bff;">{{ currentTable.bank2 }}</b>
+                    </p>
+                </div>
+
+                <div v-if="currentTable.paymentPhone" style="text-align: center; background: white; padding: 5px; border-radius: 8px;">
+                    <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=tel:' + encodeURIComponent(currentTable.paymentPhone)" alt="QR телефона" style="display: block;">
+                    <span style="font-size: 10px; color: gray;">QR с номером</span>
+                </div>
+            </div>
 
             <table>
                 <thead><tr><th>Участник</th><th>Сумма к оплате</th><th>Статус</th></tr></thead>
@@ -331,6 +347,17 @@
                     alert('Неверный пароль!');
                 }
                 this.inputPassword = '';
+            },
+            copyPhone() {
+                if (!this.currentTable || !this.currentTable.paymentPhone) return;
+                navigator.clipboard.writeText(this.currentTable.paymentPhone)
+                    .then(() => {
+                        alert('Номер скопирован: ' + this.currentTable.paymentPhone);
+                    })
+                    .catch(err => {
+                        console.error('Ошибка копирования: ', err);
+                        alert('Не удалось скопировать номер автоматически.');
+                    });
             },
             leaveTable() {
                 this.currentTableId = null;
