@@ -178,7 +178,7 @@
                     </td>
                     <td>
                         <span v-if="role !== 'admin'">{{ item.price }} / <b>{{ getFinalPrice(item).toFixed(2) }} ₽</b></span>
-                        <div v-else><input v-model.number="item.price" type="number" style="width: 60px;"> / <b>{{ getFinalPrice(item).toFixed(2) }}</b></div>
+                        <div v-else><input v-model.number="item.price" type="number" style="width: 120px;"> / <b>{{ getFinalPrice(item).toFixed(2) }}</b></div>
                     </td>
                     <td>
                         <input v-else v-model.number="item.discount" type="number" placeholder="Глоб." style="width: 100px;">
