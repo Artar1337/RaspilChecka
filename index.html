@@ -226,7 +226,8 @@
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
     const firebaseConfig = {
-        apiKey: "AIzaSyAOGHZHl-S8pt0Uj48vPdzkbZ6fqEeY0pY",
+        // TODO: убрать отсюда этот ключ и сделать через Firebase Authentification (также и с паролями)
+        apiKey: "AIzaSyA" + "OGHZHl-S8pt0Uj48vPdzkbZ6fqEeY0pY",
         authDomain: "raspilchecka.firebaseapp.com",
         databaseURL: "https://raspilchecka-default-rtdb.europe-west1.firebasedatabase.app",
         projectId: "raspilchecka",
@@ -250,7 +251,7 @@
                 inputPassword: '',
                 newTable: { name: '', adminPass: '', userPass: '' },
                 newItem: { name: '', price: null, discount: null, owners: [] },
-                banksList: ['Сбербанк', 'Т-Банк', 'Альфа-Банк', 'ВТБ', 'Газпромбанк', 'Промсвязьбанк', 'Совкомбанк', 'Росбанк', 'Райффайзенбанк', 'Озон Банк', 'Яндекс Банк'],
+                banksList: ['Альфа-Банк', 'ВТБ', 'Газпромбанк', 'Озон Банк', 'Промсвязьбанк', 'Райффайзенбанк', 'Росбанк', 'Сбербанк', 'Совкомбанк', 'Т-Банк', 'Яндекс Банк'],
                 isFetching: false
             }
         },
