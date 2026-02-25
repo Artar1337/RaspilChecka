@@ -81,7 +81,7 @@
 
     <div v-else-if="view === 'table' && currentTable">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <button @click="leaveTable" class="secondary">&larr; Мои таблицы</button>
+            <button @click="leaveTable" class="secondary">&larr; Все таблицы</button>
             <span style="background: #e3f2fd; padding: 5px 15px; border-radius: 20px; font-size: 14px;">
                 Роль: <b>{{ role === 'admin' ? 'Администратор' : 'Пользователь' }}</b>
             </span>
@@ -141,7 +141,7 @@
             <input v-model="newItem.name" placeholder="Название">
             <input v-model.number="newItem.price" type="number" placeholder="Цена">
             <button @click="addItem" class="success">Добавить</button>
-            <button @click="simulateOCR" style="margin-left: 10px; background: #6f42c1;">🤖 Тест ИИ-парсинга</button>
+            <button @click="simulateOCR" style="margin-left: 10px; background: #6f42c1;">🤖 Спарсить чек (TODO: сделать)</button>
 
             <div style="margin-top: 25px; text-align: right;">
                 <button @click="deleteCurrentTable" class="danger">Удалить всю таблицу</button>
@@ -154,8 +154,8 @@
                 <thead>
                 <tr>
                     <th>Позиция</th>
-                    <th>Цена (Без / Со ск.)</th>
-                    <th>Скидка %</th>
+                    <th>Цена (Без скидки / Со скидкой)</th>
+                    <th>Скидка (%)</th>
                     <th>Кто оплачивает?</th>
                     <th v-if="role === 'admin'">Действия</th>
                 </tr>
@@ -167,15 +167,15 @@
                 <tr v-for="(item, index) in currentTable.items" :key="index">
                     <td>
                         <span v-if="role !== 'admin'">{{ item.name }}</span>
-                        <input v-else v-model="item.name" style="width: 120px;">
+                        <input v-else v-model="item.name" style="width: 150px;">
                     </td>
                     <td>
                         <span v-if="role !== 'admin'">{{ item.price }} / <b>{{ getFinalPrice(item).toFixed(2) }}</b></span>
-                        <div v-else><input v-model.number="item.price" type="number" style="width: 60px;"> / <b>{{ getFinalPrice(item).toFixed(2) }}</b></div>
+                        <div v-else><input v-model.number="item.price" type="number" style="width: 100px;"> / <b>{{ getFinalPrice(item).toFixed(2) }} ₽</b></div>
                     </td>
                     <td>
                         <span v-if="role !== 'admin'">{{ item.discount !== null && item.discount !== '' ? item.discount : currentTable.globalDiscount }}%</span>
-                        <input v-else v-model.number="item.discount" type="number" placeholder="Глоб." style="width: 50px;">
+                        <input v-else v-model.number="item.discount" type="number" placeholder="Глоб." style="width: 100px;">
                     </td>
                     <td>
                         <div style="margin-bottom: 5px;">
@@ -184,17 +184,17 @@
                                       @click="toggleOwner(item, user)">{{ user }}</span>
                         </div>
                         <button @click="selectAllOwners(item)" style="font-size: 11px; padding: 3px 6px;">Все</button>
-                        <button @click="deselectAllOwners(item)" class="danger" style="font-size: 11px; padding: 3px 6px; margin-left: 5px;">Снять</button>
+                        <button @click="deselectAllOwners(item)" class="danger" style="font-size: 11px; padding: 3px 6px; margin-left: 5px;">Никто</button>
                     </td>
                     <td v-if="role === 'admin'">
-                        <button @click="deleteItem(index)" class="danger" style="padding: 4px 8px;">X</button>
+                        <button @click="deleteItem(index)" class="danger" style="padding: 4px 8px;">Убрать позицию</button>
                     </td>
                 </tr>
                 </tbody>
             </table>
             <div class="total-box">
-                Итого чек: {{ totalWithoutDiscount.toFixed(2) }} ₽ <br>
-                <span style="color: #28a745;">С учетом скидок: {{ totalWithDiscount.toFixed(2) }} ₽</span>
+                Сумма без учёта скидки: {{ totalWithoutDiscount.toFixed(2) }} ₽ <br>
+                <span style="color: #28a745;">Сумма с учётом скидок: {{ totalWithDiscount.toFixed(2) }} ₽</span>
             </div>
         </div>
 
@@ -392,6 +392,7 @@
                 this.newItem = { name: '', price: null, discount: null, owners: [] };
             },
             deleteItem(index) { this.currentTable.items.splice(index, 1); },
+            // TODO: обращение к API для парсинга чека
             simulateOCR() {
                 if (!this.currentTable.items) this.currentTable.items = [];
                 this.currentTable.items.push(
