@@ -28,7 +28,8 @@
         .total-box { font-size: 18px; font-weight: bold; text-align: right; margin-top: 15px; }
         .receipt-gallery { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 10px; }
         .receipt-wrapper { position: relative; max-width: 100%; width: 250px; }
-        .receipt-image { width: 100%; border-radius: 8px; border: 1px solid #ccc; display: block; }
+        .receipt-image { width: 100%; border-radius: 8px; border: 1px solid #ccc; display: block; cursor: zoom-in; transition: transform 0.2s; }
+        .receipt-image:hover { transform: scale(1.02); }
         .remove-img-btn { position: absolute; top: -10px; right: -10px; border-radius: 50%; width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 1; text-align: center; }
         .table-list-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: white; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; }
         .table-list-item:hover { border-color: #007bff; box-shadow: 0 2px 8px rgba(0,123,255,0.1); }
@@ -37,6 +38,11 @@
 <body>
 
 <div id="app" class="app-container">
+
+    <div v-if="zoomedImage" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column;" @click="zoomedImage = null">
+        <img :src="zoomedImage" style="max-width: 95%; max-height: 85%; border-radius: 8px; box-shadow: 0 5px 25px rgba(0,0,0,0.5);">
+        <button class="secondary" style="margin-top: 20px; padding: 10px 20px; font-size: 16px; border-radius: 30px;">Закрыть чек</button>
+    </div>
 
     <div v-if="view === 'home'">
         <h1>💸 Распил Чека</h1>
@@ -91,9 +97,10 @@
 
         <div class="card">
             <h3>Фото чеков</h3>
+            <p style="font-size: 12px; color: gray; margin-top: -10px;">Нажмите на фото, чтобы увеличить</p>
             <div v-if="currentTable.receiptImages && currentTable.receiptImages.length > 0" class="receipt-gallery">
                 <div v-for="(img, index) in currentTable.receiptImages" :key="index" class="receipt-wrapper">
-                    <img :src="img" alt="Чек" class="receipt-image">
+                    <img :src="img" alt="Чек" class="receipt-image" @click="zoomedImage = img">
                     <button v-if="role === 'admin'" @click="removeImage(index)" class="danger remove-img-btn">X</button>
                 </div>
             </div>
@@ -170,8 +177,8 @@
                         <input v-else v-model="item.name" style="width: 150px;">
                     </td>
                     <td>
-                        <span v-if="role !== 'admin'">{{ item.price }} / <b>{{ getFinalPrice(item).toFixed(2) }}</b></span>
-                        <div v-else><input v-model.number="item.price" type="number" style="width: 100px;"> / <b>{{ getFinalPrice(item).toFixed(2) }} ₽</b></div>
+                        <span v-if="role !== 'admin'">{{ item.price }} / <b>{{ getFinalPrice(item).toFixed(2) }} ₽</b></span>
+                        <div v-else><input v-model.number="item.price" type="number" style="width: 60px;"> / <b>{{ getFinalPrice(item).toFixed(2) }}</b></div>
                     </td>
                     <td>
                         <span v-if="role !== 'admin'">{{ item.discount !== null && item.discount !== '' ? item.discount : currentTable.globalDiscount }}%</span>
@@ -252,7 +259,6 @@
         appId: "1:89093065713:web:70cbcc12cd3ab04f859250"
     };
 
-    // Инициализация
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const { createApp } = Vue;
@@ -268,7 +274,11 @@
                 newTable: { name: '', adminPass: '', userPass: '' },
                 newItem: { name: '', price: null, discount: null, owners: [] },
                 banksList: ['Альфа-Банк', 'ВТБ', 'Газпромбанк', 'Озон Банк', 'Промсвязьбанк', 'Райффайзенбанк', 'Росбанк', 'Сбербанк', 'Совкомбанк', 'Т-Банк', 'Яндекс Банк'],
-                isFetching: false
+
+                zoomedImage: null, // Хранит ссылку на картинку, которую нужно увеличить
+
+                isFetching: false,
+                isWriting: false // ФИКС 3: Защита от "эха" сервера
             }
         },
         computed: {
@@ -288,25 +298,46 @@
             tables: {
                 deep: true,
                 handler(newVal) {
-                    // Отправляем изменения в базу данных, если это не входящее обновление от самой базы
-                    if (!this.isFetching) {
-                        set(ref(db, 'tables'), newVal || []);
-                    }
+                    if (this.isFetching) return; // Если мы сейчас читаем данные с сервера, не пишем их обратно
+
+                    // Блокируем входящие обновления на время нашей отправки (Фикс 3)
+                    this.isWriting = true;
+                    set(ref(db, 'tables'), newVal || []).then(() => {
+                        // Снимаем блокировку после успешной записи, даем небольшую задержку
+                        setTimeout(() => { this.isWriting = false; }, 400);
+                    });
                 }
             }
         },
         mounted() {
-            // Подписка на данные из Firebase
             const tablesRef = ref(db, 'tables');
             onValue(tablesRef, (snapshot) => {
-                const data = snapshot.val();
+                // Игнорируем входящие данные, если мы сами в этот момент что-то кликаем и сохраняем (Фикс 3)
+                if (this.isWriting) return;
+
                 this.isFetching = true;
+                const data = snapshot.val();
                 this.tables = data ? data : [];
-                // Задержка нужна, чтобы Vue успел отрисовать интерфейс перед тем, как мы разрешим запись обратно
-                setTimeout(() => this.isFetching = false, 200);
+
+                setTimeout(() => this.isFetching = false, 100);
             });
         },
         methods: {
+            // ФИКС 1: Логика вывода скидки
+            getDisplayDiscount(item) {
+                const disc = item.discount !== null && item.discount !== '' && item.discount !== undefined ? item.discount : this.currentTable.globalDiscount;
+                return disc === 0 ? '-' : disc + '%';
+            },
+
+            copyPhone() {
+                if (!this.currentTable || !this.currentTable.paymentPhone) return;
+                navigator.clipboard.writeText(this.currentTable.paymentPhone).then(() => {
+                    alert('Номер скопирован: ' + this.currentTable.paymentPhone);
+                }).catch(err => {
+                    alert('Не удалось скопировать номер.');
+                });
+            },
+
             createTable() {
                 if (!this.newTable.name || !this.newTable.adminPass) {
                     return alert('Имя таблицы и Пароль Админа обязательны!');
@@ -347,17 +378,6 @@
                     alert('Неверный пароль!');
                 }
                 this.inputPassword = '';
-            },
-            copyPhone() {
-                if (!this.currentTable || !this.currentTable.paymentPhone) return;
-                navigator.clipboard.writeText(this.currentTable.paymentPhone)
-                    .then(() => {
-                        alert('Номер скопирован: ' + this.currentTable.paymentPhone);
-                    })
-                    .catch(err => {
-                        console.error('Ошибка копирования: ', err);
-                        alert('Не удалось скопировать номер автоматически.');
-                    });
             },
             leaveTable() {
                 this.currentTableId = null;
