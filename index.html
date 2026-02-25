@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Распил Чека</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .app-container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        h1, h2, h3, h4 { color: #1a1a1a; margin-top: 0; }
+        .card { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee; }
+        input, select, button { padding: 8px 12px; margin: 5px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+        button.secondary { background: #6c757d; }
+        button.secondary:hover { background: #5a6268; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        th, td { border: 1px solid #e0e0e0; padding: 10px; text-align: left; vertical-align: middle; }
+        th { background: #f1f3f5; }
+        .tag { display: inline-block; padding: 4px 8px; margin: 2px; background: #e9ecef; border-radius: 12px; font-size: 12px; cursor: pointer; user-select: none; transition: 0.2s; }
+        .tag.active { background: #007bff; color: white; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .total-box { font-size: 18px; font-weight: bold; text-align: right; margin-top: 15px; }
+        .receipt-gallery { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 10px; }
+        .receipt-wrapper { position: relative; max-width: 100%; width: 250px; }
+        .receipt-image { width: 100%; border-radius: 8px; border: 1px solid #ccc; display: block; }
+        .remove-img-btn { position: absolute; top: -10px; right: -10px; border-radius: 50%; width: 24px; height: 24px; padding: 0; font-size: 12px; line-height: 1; text-align: center; }
+        .table-list-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; background: white; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; }
+        .table-list-item:hover { border-color: #007bff; box-shadow: 0 2px 8px rgba(0,123,255,0.1); }
+    </style>
+</head>
+<body>
+
+<div id="app" class="app-container">
+
+    <div v-if="view === 'home'">
+        <h1>💸 Распил Чека</h1>
+        <p>Выберите таблицу из списка или создайте новую.</p>
+
+        <div class="card">
+            <h3>Создать новую таблицу</h3>
+            <div class="grid-2">
+                <input v-model="newTable.name" placeholder="Название посиделки (напр. Шашлыки)">
+                <input v-model="newTable.adminPass" type="text" placeholder="Пароль Админа (обязательно)">
+                <input v-model="newTable.userPass" type="text" placeholder="Пароль Юзера (необязательно)">
+                <button @click="createTable" class="success">Создать таблицу</button>
+            </div>
+        </div>
+
+        <h3>Доступные таблицы</h3>
+        <div v-if="!tables || tables.length === 0" style="color: #666; font-style: italic;">Таблиц пока нет. Создайте первую!</div>
+        <div v-else>
+            <div v-for="table in tables" :key="table.id" class="table-list-item" @click="goToLogin(table.id)">
+                <div>
+                    <b style="font-size: 18px;">{{ table.name }}</b><br>
+                    <span style="font-size: 12px; color: gray;">
+                        Участников: {{ table.users ? table.users.length : 0 }} | Позиций: {{ table.items ? table.items.length : 0 }}
+                    </span>
+                </div>
+                <button class="secondary">Войти &rarr;</button>
+            </div>
+        </div>
+    </div>
+
+    <div v-else-if="view === 'login'">
+        <button @click="view = 'home'" class="secondary" style="margin-bottom: 15px;">&larr; Назад к списку</button>
+        <h1 v-if="currentTable">Вход в «{{ currentTable.name }}»</h1>
+
+        <div class="card" v-if="currentTable">
+            <p>Введите пароль для доступа (Админ или Юзер):</p>
+            <input v-model="inputPassword" type="password" placeholder="Пароль..." @keyup.enter="login">
+            <button @click="login">Войти</button>
+            <p v-if="!currentTable.userPass" style="font-size: 12px; color: green;">В этой таблице вход для юзеров без пароля. Просто нажмите "Войти" с пустым полем.</p>
+        </div>
+    </div>
+
+    <div v-else-if="view === 'table' && currentTable">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <button @click="leaveTable" class="secondary">&larr; Мои таблицы</button>
+            <span style="background: #e3f2fd; padding: 5px 15px; border-radius: 20px; font-size: 14px;">
+                Роль: <b>{{ role === 'admin' ? 'Администратор' : 'Пользователь' }}</b>
+            </span>
+        </div>
+
+        <h1>{{ currentTable.name }}</h1>
+
+        <div class="card">
+            <h3>Фото чеков</h3>
+            <div v-if="currentTable.receiptImages && currentTable.receiptImages.length > 0" class="receipt-gallery">
+                <div v-for="(img, index) in currentTable.receiptImages" :key="index" class="receipt-wrapper">
+                    <img :src="img" alt="Чек" class="receipt-image">
+                    <button v-if="role === 'admin'" @click="removeImage(index)" class="danger remove-img-btn">X</button>
+                </div>
+            </div>
+            <p v-else style="color: #666; font-style: italic;">Чеки пока не загружены.</p>
+
+            <div v-if="role === 'admin'" style="margin-top: 15px;">
+                <label style="font-size: 12px; font-weight: bold;">Добавить чеки:</label><br>
+                <input type="file" @change="handleFileUpload" accept="image/*" multiple>
+                <button v-if="currentTable.receiptImages && currentTable.receiptImages.length > 0" @click="currentTable.receiptImages = []" class="danger" style="margin-left: 10px;">Удалить все</button>
+            </div>
+        </div>
+
+        <div v-if="role === 'admin'" class="card" style="border-color: #ffd700;">
+            <h3 style="color: #d4af37;">Панель Администратора</h3>
+
+            <h4>Настройки доступа</h4>
+            <div class="grid-2">
+                <div><label>Имя таблицы:</label><br><input v-model="currentTable.name" style="width: 100%;"></div>
+                <div></div>
+                <div><label>Пароль Админа:</label><br><input v-model="currentTable.adminPass" style="width: 100%;"></div>
+                <div><label>Пароль Юзера (можно пусто):</label><br><input v-model="currentTable.userPass" style="width: 100%;"></div>
+            </div>
+            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+
+            <h4>Финансы и участники</h4>
+            <div class="grid-2">
+                <div><label>Участники (через запятую):</label><br><input v-model="currentTable.usersInput" @change="updateUsers" style="width: 100%;"></div>
+                <div><label>Глобальная скидка (%):</label><br><input v-model.number="currentTable.globalDiscount" type="number" min="0" max="100"></div>
+                <div><label>Телефон для перевода:</label><br><input v-model="currentTable.paymentPhone" style="width: 100%;"></div>
+                <div>
+                    <label>Банки:</label><br>
+                    <select v-model="currentTable.bank1">
+                        <option value="">-- Выбрать --</option>
+                        <option v-for="bank in banksList" :key="bank" :value="bank" :disabled="bank === currentTable.bank2">{{ bank }}</option>
+                    </select>
+                    <select v-model="currentTable.bank2">
+                        <option value="">-- Выбрать --</option>
+                        <option v-for="bank in banksList" :key="bank" :value="bank" :disabled="bank === currentTable.bank1">{{ bank }}</option>
+                    </select>
+                </div>
+            </div>
+            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+
+            <h4>Добавить позицию</h4>
+            <input v-model="newItem.name" placeholder="Название">
+            <input v-model.number="newItem.price" type="number" placeholder="Цена">
+            <button @click="addItem" class="success">Добавить</button>
+            <button @click="simulateOCR" style="margin-left: 10px; background: #6f42c1;">🤖 Тест ИИ-парсинга</button>
+
+            <div style="margin-top: 25px; text-align: right;">
+                <button @click="deleteCurrentTable" class="danger">Удалить всю таблицу</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Позиции в чеке</h3>
+            <table>
+                <thead>
+                <tr>
+                    <th>Позиция</th>
+                    <th>Цена (Без / Со ск.)</th>
+                    <th>Скидка %</th>
+                    <th>Кто оплачивает?</th>
+                    <th v-if="role === 'admin'">Действия</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr v-if="!currentTable.items || currentTable.items.length === 0">
+                    <td :colspan="role === 'admin' ? 5 : 4" style="text-align: center; color: #888;">Позиций нет.</td>
+                </tr>
+                <tr v-for="(item, index) in currentTable.items" :key="index">
+                    <td>
+                        <span v-if="role !== 'admin'">{{ item.name }}</span>
+                        <input v-else v-model="item.name" style="width: 120px;">
+                    </td>
+                    <td>
+                        <span v-if="role !== 'admin'">{{ item.price }} / <b>{{ getFinalPrice(item).toFixed(2) }}</b></span>
+                        <div v-else><input v-model.number="item.price" type="number" style="width: 60px;"> / <b>{{ getFinalPrice(item).toFixed(2) }}</b></div>
+                    </td>
+                    <td>
+                        <span v-if="role !== 'admin'">{{ item.discount !== null && item.discount !== '' ? item.discount : currentTable.globalDiscount }}%</span>
+                        <input v-else v-model.number="item.discount" type="number" placeholder="Глоб." style="width: 50px;">
+                    </td>
+                    <td>
+                        <div style="margin-bottom: 5px;">
+                                <span v-for="user in currentTable.users" :key="user"
+                                      class="tag" :class="{ active: item.owners && item.owners.includes(user) }"
+                                      @click="toggleOwner(item, user)">{{ user }}</span>
+                        </div>
+                        <button @click="selectAllOwners(item)" style="font-size: 11px; padding: 3px 6px;">Все</button>
+                        <button @click="deselectAllOwners(item)" class="danger" style="font-size: 11px; padding: 3px 6px; margin-left: 5px;">Снять</button>
+                    </td>
+                    <td v-if="role === 'admin'">
+                        <button @click="deleteItem(index)" class="danger" style="padding: 4px 8px;">X</button>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <div class="total-box">
+                Итого чек: {{ totalWithoutDiscount.toFixed(2) }} ₽ <br>
+                <span style="color: #28a745;">С учетом скидок: {{ totalWithDiscount.toFixed(2) }} ₽</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>К оплате участникам</h3>
+            <p>Перевод: <b>{{ currentTable.paymentPhone || 'Номер не указан' }}</b></p>
+            <p>Банки: <b style="color: #007bff;">{{ currentTable.bank1 || 'Не выбран' }}</b> <span v-if="currentTable.bank1 && currentTable.bank2">и</span> <b style="color: #007bff;">{{ currentTable.bank2 }}</b></p>
+
+            <table>
+                <thead><tr><th>Участник</th><th>Сумма к оплате</th><th>Статус</th></tr></thead>
+                <tbody>
+                <tr v-for="user in currentTable.users" :key="user">
+                    <td><b>{{ user }}</b></td>
+                    <td>{{ calculateUserTotal(user).toFixed(2) }} ₽</td>
+                    <td>
+                        <label style="cursor: pointer;">
+                            <input type="checkbox" :checked="isUserPaid(user)" @change="toggleUserPayment(user)"> Оплатил
+                        </label>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAOGHZHl-S8pt0Uj48vPdzkbZ6fqEeY0pY",
+        authDomain: "raspilchecka.firebaseapp.com",
+        databaseURL: "https://raspilchecka-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "raspilchecka",
+        storageBucket: "raspilchecka.firebasestorage.app",
+        messagingSenderId: "89093065713",
+        appId: "1:89093065713:web:70cbcc12cd3ab04f859250"
+    };
+
+    // Инициализация
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const { createApp } = Vue;
+
+    createApp({
+        data() {
+            return {
+                view: 'home',
+                tables: [],
+                currentTableId: null,
+                role: null,
+                inputPassword: '',
+                newTable: { name: '', adminPass: '', userPass: '' },
+                newItem: { name: '', price: null, discount: null, owners: [] },
+                banksList: ['Сбербанк', 'Т-Банк', 'Альфа-Банк', 'ВТБ', 'Газпромбанк', 'Промсвязьбанк', 'Совкомбанк', 'Росбанк', 'Райффайзенбанк', 'Озон Банк', 'Яндекс Банк'],
+                isFetching: false
+            }
+        },
+        computed: {
+            currentTable() {
+                return this.tables ? this.tables.find(t => t.id === this.currentTableId) : null;
+            },
+            totalWithoutDiscount() {
+                if (!this.currentTable || !this.currentTable.items) return 0;
+                return this.currentTable.items.reduce((sum, item) => sum + (item.price || 0), 0);
+            },
+            totalWithDiscount() {
+                if (!this.currentTable || !this.currentTable.items) return 0;
+                return this.currentTable.items.reduce((sum, item) => sum + this.getFinalPrice(item), 0);
+            }
+        },
+        watch: {
+            tables: {
+                deep: true,
+                handler(newVal) {
+                    // Отправляем изменения в базу данных, если это не входящее обновление от самой базы
+                    if (!this.isFetching) {
+                        set(ref(db, 'tables'), newVal || []);
+                    }
+                }
+            }
+        },
+        mounted() {
+            // Подписка на данные из Firebase
+            const tablesRef = ref(db, 'tables');
+            onValue(tablesRef, (snapshot) => {
+                const data = snapshot.val();
+                this.isFetching = true;
+                this.tables = data ? data : [];
+                // Задержка нужна, чтобы Vue успел отрисовать интерфейс перед тем, как мы разрешим запись обратно
+                setTimeout(() => this.isFetching = false, 200);
+            });
+        },
+        methods: {
+            createTable() {
+                if (!this.newTable.name || !this.newTable.adminPass) {
+                    return alert('Имя таблицы и Пароль Админа обязательны!');
+                }
+                const newTbl = {
+                    id: Date.now().toString(),
+                    name: this.newTable.name,
+                    adminPass: this.newTable.adminPass,
+                    userPass: this.newTable.userPass || '',
+                    receiptImages: [],
+                    usersInput: 'Аня, Вася, Петя',
+                    users: ['Аня', 'Вася', 'Петя'],
+                    globalDiscount: 0,
+                    paymentPhone: '',
+                    bank1: '',
+                    bank2: '',
+                    items: [],
+                    userPayments: {}
+                };
+                if (!this.tables) this.tables = [];
+                this.tables.unshift(newTbl);
+                this.newTable = { name: '', adminPass: '', userPass: '' };
+            },
+            goToLogin(id) {
+                this.currentTableId = id;
+                this.inputPassword = '';
+                this.view = 'login';
+            },
+            login() {
+                if (!this.currentTable) return;
+                if (this.inputPassword === this.currentTable.adminPass) {
+                    this.role = 'admin';
+                    this.view = 'table';
+                } else if (this.inputPassword === this.currentTable.userPass || (this.currentTable.userPass === '' && this.inputPassword === '')) {
+                    this.role = 'user';
+                    this.view = 'table';
+                } else {
+                    alert('Неверный пароль!');
+                }
+                this.inputPassword = '';
+            },
+            leaveTable() {
+                this.currentTableId = null;
+                this.role = null;
+                this.view = 'home';
+            },
+            deleteCurrentTable() {
+                if (confirm('Вы уверены, что хотите удалить эту таблицу навсегда?')) {
+                    this.tables = this.tables.filter(t => t.id !== this.currentTableId);
+                    this.leaveTable();
+                }
+            },
+            handleFileUpload(e) {
+                const files = e.target.files;
+                if (!files.length) return;
+                Array.from(files).forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        if (!this.currentTable.receiptImages) this.currentTable.receiptImages = [];
+                        this.currentTable.receiptImages.push(event.target.result);
+                    };
+                    reader.readAsDataURL(file);
+                });
+                e.target.value = '';
+            },
+            removeImage(index) { this.currentTable.receiptImages.splice(index, 1); },
+            updateUsers() { this.currentTable.users = this.currentTable.usersInput.split(',').map(u => u.trim()).filter(u => u); },
+            addItem() {
+                if (!this.newItem.name || !this.newItem.price) return;
+                if (!this.currentTable.items) this.currentTable.items = [];
+                this.currentTable.items.push({ ...this.newItem, owners: [] });
+                this.newItem = { name: '', price: null, discount: null, owners: [] };
+            },
+            deleteItem(index) { this.currentTable.items.splice(index, 1); },
+            simulateOCR() {
+                if (!this.currentTable.items) this.currentTable.items = [];
+                this.currentTable.items.push(
+                    { name: 'Пицца 4 сыра', price: 650, discount: null, owners: [] },
+                    { name: 'Пиво IPA', price: 300, discount: 5, owners: [] }
+                );
+            },
+            getFinalPrice(item) {
+                const disc = item.discount !== null && item.discount !== '' && item.discount !== undefined ? item.discount : this.currentTable.globalDiscount;
+                return item.price * (1 - (disc / 100));
+            },
+            toggleOwner(item, user) {
+                if (!item.owners) item.owners = [];
+                const idx = item.owners.indexOf(user);
+                if (idx > -1) item.owners.splice(idx, 1);
+                else item.owners.push(user);
+            },
+            selectAllOwners(item) { item.owners = [...this.currentTable.users]; },
+            deselectAllOwners(item) { item.owners = []; },
+            calculateUserTotal(user) {
+                if (!this.currentTable.items) return 0;
+                return this.currentTable.items.reduce((sum, item) => {
+                    if (item.owners && item.owners.includes(user)) {
+                        return sum + (this.getFinalPrice(item) / item.owners.length);
+                    }
+                    return sum;
+                }, 0);
+            },
+            isUserPaid(user) {
+                return this.currentTable.userPayments ? !!this.currentTable.userPayments[user] : false;
+            },
+            toggleUserPayment(user) {
+                if (!this.currentTable.userPayments) this.currentTable.userPayments = {};
+                this.currentTable.userPayments[user] = !this.currentTable.userPayments[user];
+            }
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
